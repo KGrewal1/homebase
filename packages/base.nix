@@ -5,30 +5,23 @@ let
 
   # Collect all tool packages from modules/dev/ (single source of truth)
   devModuleDir = ../modules/dev;
-  devModuleFiles = builtins.filter
-    (f: f != "dotfiles.nix" && f != "cuda.nix")
+  devModuleFiles =
     (builtins.attrNames (builtins.readDir devModuleDir));
   devToolPackages = builtins.concatMap
     (f: (import (devModuleDir + "/${f}") { inherit pkgs lib; }).packages)
     devModuleFiles;
 
-  # System essentials (no individual devenv modules for these)
-  systemPackages = with pkgs; [
-    uutils-coreutils-noprefix
-    bashInteractive
-    cacert
-    gnutar
-    gzip
-    gnused
-    gnugrep
-    findutils
-    less
-    procps
-    which
-  ];
+
+  baseModuleDir = ../modules/base;
+  baseModuleFiles =
+    (builtins.attrNames (builtins.readDir baseModuleDir));
+  baseToolPackages = builtins.concatMap
+    (f: (import (baseModuleDir + "/${f}") { inherit pkgs lib; }).packages)
+    baseModuleFiles;
+
 in
 {
-  packages = systemPackages ++ devToolPackages ++ python.packages;
+  packages = baseToolPackages ++ devToolPackages ++ python.packages;
 
   env = {
     SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
