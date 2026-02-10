@@ -21,42 +21,83 @@
 
       lib = pkgs.lib;
 
-      # Shared package sets
-      base = import ./packages/base.nix { inherit pkgs; };
-      shell = import ./packages/shell.nix { inherit pkgs; };
-      coreutils = import ./packages/coreutils.nix { inherit pkgs; };
-      dev = import ./packages/dev.nix { inherit pkgs; };
-      python = import ./packages/python.nix { inherit pkgs lib; };
-
-      allPackages =
-        base.packages
-        ++ shell.packages
-        ++ coreutils.packages
-        ++ dev.packages
-        ++ python.packages;
+      # All packages: system essentials + tools (from modules/dev/) + python
+      base = import ./packages/base.nix { inherit pkgs lib; };
 
       dotfiles = ./dotfiles;
 
+      # Docker environment helpers
+      inherit (pkgs.dockerTools) usrBinEnv binSh caCertificates;
+
+      # fakeNss extended with a dev user (uid 1000) and wheel group
+      userNss = pkgs.runCommand "user-nss" {} ''
+        mkdir -p $out/etc
+        cat > $out/etc/passwd <<'EOF'
+root:x:0:0:root:/root:/bin/sh
+nobody:x:65534:65534:nobody:/nonexistent:/bin/sh
+dev:x:1000:1000:dev:/home/dev:${pkgs.fish}/bin/fish
+EOF
+        cat > $out/etc/group <<'EOF'
+root:x:0:
+wheel:x:1:dev
+nobody:x:65534:
+dev:x:1000:
+EOF
+        cat > $out/etc/nsswitch.conf <<'EOF'
+hosts: files dns
+EOF
+      '';
+
+      # Passwordless sudo for wheel group
+      sudoSetup = pkgs.runCommand "sudo-setup" {} ''
+        mkdir -p $out/etc/sudoers.d $out/etc/pam.d
+        echo "%wheel ALL=(ALL) NOPASSWD: ALL" > $out/etc/sudoers.d/wheel
+        chmod 440 $out/etc/sudoers.d/wheel
+        cat > $out/etc/sudoers <<'EOF'
+root ALL=(ALL) ALL
+@includedir /etc/sudoers.d
+EOF
+        chmod 440 $out/etc/sudoers
+        cat > $out/etc/pam.d/sudo <<'EOF'
+auth       sufficient pam_permit.so
+account    sufficient pam_permit.so
+session    sufficient pam_permit.so
+EOF
+      '';
+
+      # Shared docker contents: env helpers + user setup
+      dockerEnvPaths = [
+        usrBinEnv
+        binSh
+        caCertificates
+        userNss
+        sudoSetup
+        pkgs.sudo
+      ];
+
+      # Create writable /home/dev with dotfiles symlinked into the store
+      homeDirSetup = ''
+        mkdir -p /home/dev/.config/fish /home/dev/.config/zellij
+        mkdir -p /home/dev/.cache /home/dev/.local/share /home/dev/.local/state
+        mkdir -p /tmp
+        chmod 1777 /tmp
+        ln -s ${dotfiles}/fish/config.fish /home/dev/.config/fish/config.fish
+        ln -s ${dotfiles}/zellij/config.kdl /home/dev/.config/zellij/config.kdl
+        ln -s ${dotfiles}/starship.toml /home/dev/.config/starship.toml
+        chown -R 1000:1000 /home/dev
+      '';
+
       entrypoint = pkgs.writeShellScript "homebase-entry" ''
-        export HOME=/tmp/homebase
-        export XDG_CONFIG_HOME=$HOME/.config
-        export XDG_CACHE_HOME=$HOME/.cache
-        export XDG_DATA_HOME=$HOME/.local/share
-        export XDG_STATE_HOME=$HOME/.local/state
-        mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_DATA_HOME $XDG_STATE_HOME
-        cp -r ${dotfiles}/fish $XDG_CONFIG_HOME/fish
-        cp -r ${dotfiles}/zellij $XDG_CONFIG_HOME/zellij
-        cp ${dotfiles}/starship.toml $XDG_CONFIG_HOME/starship.toml
-        chmod -R u+w $XDG_CONFIG_HOME
-        cd $HOME
+        cd /home/dev
         exec fish "$@"
       '';
 
       baseEnv = [
+        "HOME=/home/dev"
+        "USER=dev"
         "UV_PYTHON_PREFERENCE=system"
-        "UV_PYTHON=${python.env.UV_PYTHON}"
-        "SSL_CERT_FILE=${base.env.SSL_CERT_FILE}"
-        "LD_LIBRARY_PATH=${python.env.LD_LIBRARY_PATH}"
+        "UV_PYTHON=${base.env.UV_PYTHON}"
+        "LD_LIBRARY_PATH=${base.env.LD_LIBRARY_PATH}"
       ];
 
       # Helper: build a CUDA image given a cudaPackages set
@@ -67,11 +108,14 @@
         pkgs.dockerTools.buildLayeredImage {
           name = "homebase-cuda";
           tag = cudaPkgs.cudatoolkit.version;
-          contents = allPackages ++ cuda.packages;
+          contents = base.packages ++ cuda.packages ++ dockerEnvPaths;
+          enableFakechroot = true;
+          fakeRootCommands = homeDirSetup;
           config = {
             Cmd = [ "${entrypoint}" ];
+            User = "dev";
             Env = baseEnv ++ [
-              "LD_LIBRARY_PATH=${python.env.LD_LIBRARY_PATH}:${cuda.env.LD_LIBRARY_PATH}"
+              "LD_LIBRARY_PATH=${base.env.LD_LIBRARY_PATH}:${cuda.env.LD_LIBRARY_PATH}"
               "CUDA_HOME=${cuda.env.CUDA_HOME}"
               "NVIDIA_VISIBLE_DEVICES=all"
               "NVIDIA_DRIVER_CAPABILITIES=compute,utility"
@@ -94,9 +138,12 @@
         docker = pkgs.dockerTools.buildLayeredImage {
           name = "homebase";
           tag = "latest";
-          contents = allPackages;
+          contents = base.packages ++ dockerEnvPaths;
+          enableFakechroot = true;
+          fakeRootCommands = homeDirSetup;
           config = {
             Cmd = [ "${entrypoint}" ];
+            User = "dev";
             Env = baseEnv;
           };
         };
