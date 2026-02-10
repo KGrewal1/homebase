@@ -1,9 +1,13 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, home-manager }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
@@ -15,21 +19,23 @@
         };
       };
 
-      python = pkgs.python312;
+      lib = pkgs.lib;
+
+      # Shared package sets
+      base = import ./packages/base.nix { inherit pkgs; };
+      shell = import ./packages/shell.nix { inherit pkgs; };
+      coreutils = import ./packages/coreutils.nix { inherit pkgs; };
+      dev = import ./packages/dev.nix { inherit pkgs; };
+      python = import ./packages/python.nix { inherit pkgs lib; };
+
+      allPackages =
+        base.packages
+        ++ shell.packages
+        ++ coreutils.packages
+        ++ dev.packages
+        ++ python.packages;
+
       dotfiles = ./dotfiles;
-
-      # Native libraries needed by pip-installed wheels (numpy, torch, etc.)
-      nativeLibs = with pkgs; [
-        stdenv.cc.cc.lib  # libstdc++
-        zlib              # libz (numpy, pillow)
-        openssl           # libssl/libcrypto (requests, cryptography)
-        libffi            # libffi (ctypes, cffi)
-        xz                # liblzma (pandas)
-        bzip2             # libbz2 (pandas)
-        readline          # libreadline (interactive python)
-      ];
-
-      libPath = pkgs.lib.makeLibraryPath nativeLibs;
 
       entrypoint = pkgs.writeShellScript "homebase-entry" ''
         export HOME=/tmp/homebase
@@ -46,69 +52,41 @@
         exec fish "$@"
       '';
 
-      basePackages = with pkgs; [
-        # Essentials
-        coreutils
-        bashInteractive
-        cacert
-        git
-        curl
-        vim
-
-        # Shell
-        fish
-        starship
-        zellij
-
-        # Modern coreutils
-        bat
-        eza
-        dust
-        fd
-        ripgrep
-        htop
-
-        # Dev tools
-        just
-        tokei
-        gh
-
-        # Python
-        python
-        uv
-        ruff
-      ] ++ nativeLibs;
-
       baseEnv = [
         "UV_PYTHON_PREFERENCE=system"
-        "UV_PYTHON=${python}/bin/python3"
-        "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        "UV_PYTHON=${python.env.UV_PYTHON}"
+        "SSL_CERT_FILE=${base.env.SSL_CERT_FILE}"
+        "LD_LIBRARY_PATH=${python.env.LD_LIBRARY_PATH}"
       ];
 
       # Helper: build a CUDA image given a cudaPackages set
       mkCudaImage = cudaPkgs:
         let
-          cudaLibs = [
-            cudaPkgs.cudatoolkit
-            cudaPkgs.cudnn
-            cudaPkgs.nccl
-          ];
-          cudaLibPath = pkgs.lib.makeLibraryPath cudaLibs;
+          cuda = import ./packages/cuda.nix { cudaPackages = cudaPkgs; inherit lib; };
         in
         pkgs.dockerTools.buildLayeredImage {
           name = "homebase-cuda";
           tag = cudaPkgs.cudatoolkit.version;
-          contents = basePackages ++ cudaLibs;
+          contents = allPackages ++ cuda.packages;
           config = {
             Cmd = [ "${entrypoint}" ];
             Env = baseEnv ++ [
-              "LD_LIBRARY_PATH=${libPath}:${cudaLibPath}"
-              "CUDA_HOME=${cudaPkgs.cudatoolkit}"
+              "LD_LIBRARY_PATH=${python.env.LD_LIBRARY_PATH}:${cuda.env.LD_LIBRARY_PATH}"
+              "CUDA_HOME=${cuda.env.CUDA_HOME}"
               "NVIDIA_VISIBLE_DEVICES=all"
               "NVIDIA_DRIVER_CAPABILITIES=compute,utility"
             ];
           };
         };
+
+      mkNixosSystem = { system, modules }:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [ home-manager.nixosModules.home-manager ] ++ modules;
+        };
+
+      inputs = { inherit nixpkgs home-manager; };
     in
     {
       packages.${system} = {
@@ -116,23 +94,41 @@
         docker = pkgs.dockerTools.buildLayeredImage {
           name = "homebase";
           tag = "latest";
-          contents = basePackages;
+          contents = allPackages;
           config = {
             Cmd = [ "${entrypoint}" ];
-            Env = baseEnv ++ [
-              "LD_LIBRARY_PATH=${libPath}"
-            ];
+            Env = baseEnv;
           };
         };
 
         # CUDA 12 (latest 12.x in nixpkgs)
         docker-cuda12 = mkCudaImage pkgsUnfree.cudaPackages_12;
 
-        # CUDA 13 (latest 13.x in nixpkgs, if available)
+        # CUDA 13 (latest 13.x in nixpkgs)
         docker-cuda13 = mkCudaImage pkgsUnfree.cudaPackages_13;
 
         # Default CUDA (whatever nixpkgs considers current)
         docker-cuda = mkCudaImage pkgsUnfree.cudaPackages;
+      };
+
+      nixosConfigurations = {
+        # x86_64 dev machine (no CUDA)
+        dev = mkNixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./modules/nixos/base.nix ./modules/nixos/desktop.nix ];
+        };
+
+        # x86_64 CUDA dev machine
+        dev-cuda = mkNixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./modules/nixos/base.nix ./modules/nixos/desktop.nix ./modules/nixos/cuda.nix ];
+        };
+
+        # Raspberry Pi
+        rpi = mkNixosSystem {
+          system = "aarch64-linux";
+          modules = [ ./modules/nixos/base.nix ./modules/nixos/rpi.nix ];
+        };
       };
     };
 }

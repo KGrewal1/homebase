@@ -1,9 +1,8 @@
-{ pkgs, lib, ... }:
-
+{ pkgs, lib }:
 let
   python = pkgs.python312;
 
-  # Native libraries needed by pip-installed wheels
+  # Native libraries needed by pip-installed wheels (numpy, torch, etc.)
   nativeLibs = with pkgs; [
     stdenv.cc.cc.lib  # libstdc++ (numpy, torch, etc.)
     zlib              # libz (numpy, pillow)

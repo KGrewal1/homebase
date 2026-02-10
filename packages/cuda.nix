@@ -1,7 +1,6 @@
-{ pkgs, lib, ... }:
-
+{ cudaPackages, lib }:
 let
-  cudaLibs = with pkgs; [
+  cudaLibs = [
     cudaPackages.cudatoolkit
     cudaPackages.cudnn
     cudaPackages.nccl
@@ -11,7 +10,7 @@ in
   packages = cudaLibs;
 
   env = {
-    CUDA_HOME = "${pkgs.cudaPackages.cudatoolkit}";
+    CUDA_HOME = "${cudaPackages.cudatoolkit}";
     LD_LIBRARY_PATH = lib.makeLibraryPath cudaLibs;
   };
 }

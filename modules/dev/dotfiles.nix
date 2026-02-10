@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 let
-  dotfiles = ../dotfiles;
+  dotfiles = ../../dotfiles;
 in
 {
   enterShell = ''
