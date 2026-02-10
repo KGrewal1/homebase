@@ -1,7 +1,7 @@
 { pkgs, lib, ... }:
 
 let
-  base = import ../../packages/base.nix { inherit pkgs lib; };
+  base = import ../../packages/packages.nix { inherit pkgs lib; };
 in
 {
   environment.systemPackages = base.packages;
@@ -25,10 +25,10 @@ in
 
   system.stateVersion = "24.11";
 
-  # Home-manager for dotfiles only — packages come from system level
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
+    extraSpecialArgs = { inherit (base) configFiles; };
     users.dev = { imports = [ ../home/base.nix ]; };
   };
 }

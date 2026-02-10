@@ -132,24 +132,29 @@ modules/dev/
 ├── htop.nix
 ├── just.nix
 ├── python.nix      # python 3.12 + uv + ruff + native libs, sets UV_PYTHON/LD_LIBRARY_PATH
+├── openssh.nix
 ├── ripgrep.nix
 ├── starship.nix
 ├── tokei.nix
 ├── vim.nix
+├── wget.nix
 └── zellij.nix
 ```
 
 ## Architecture
 
 ```
-packages/        # shared package definitions (single source of truth)
 modules/
-  dev/           # devenv modules for per-project use
+  dev/           # devenv modules (single source of truth for tools)
   home/          # home-manager modules (dotfiles + user packages)
   nixos/         # NixOS system modules (compose with home-manager)
+packages/
+  base.nix       # system essentials (coreutils, bash, tar, sed, grep, etc.)
+  python.nix     # python + native libs + env vars
+  cuda.nix       # CUDA toolkit + env vars
 ```
 
-Package lists are defined once in `packages/` and consumed by Docker images (`flake.nix`), NixOS system configs (`modules/nixos/`), and home-manager (`modules/home/`). NixOS configs use home-manager to manage dotfiles and user-level packages for the `dev` user.
+Tool packages are defined once in `modules/dev/` and auto-collected by Docker images (`flake.nix`), home-manager (`modules/home/base.nix`), and NixOS configs. System-level essentials and env-var packages live in `packages/`.
 
 ## Adding a new tool
 
@@ -160,5 +165,4 @@ Package lists are defined once in `packages/` and consumed by Docker images (`fl
      packages = [ pkgs.toolname ];
    }
    ```
-2. Add the package to the appropriate file in `packages/` (for container and system images)
-3. Rebuild: `nix build .#docker`
+2. Rebuild: `nix build .#docker`

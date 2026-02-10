@@ -1,5 +1,0 @@
-{ pkgs, ... }:
-
-{
-  packages = [ pkgs.gnutar ];
-}

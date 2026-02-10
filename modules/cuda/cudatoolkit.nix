@@ -1,0 +1,2 @@
+{ cudaPackages, ... }:
+{ packages = [ cudaPackages.cudatoolkit ]; }
