@@ -20,7 +20,4 @@ in
 
   nixpkgs.config.allowUnfree = true;
   nixpkgs.config.cudaSupport = true;
-
-  # Add CUDA to home-manager
-  home-manager.users.dev.imports = [ ../home/cuda.nix ];
 }
