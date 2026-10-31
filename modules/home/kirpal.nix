@@ -163,7 +163,8 @@ in
     cargo-nextest
     cargo-watch
     cargo-expand
-    cargo-llvm-cov
+    # tests fail in nixpkgs (rustc/LLVM profraw version mismatch); the tool itself is fine
+    (cargo-llvm-cov.overrideAttrs { doCheck = false; })
     cargo-flamegraph
     cargo-binstall
     cargo-udeps
@@ -216,7 +217,7 @@ in
 
     # Build / C / Fortran
     gfortran # also provides gcc/g++
-    (lib.lowPrio clang)
+    (lib.setPrio 20 clang) # gfortran wrapper is already lowPrio (10); clang must be lower still or bin/cc conflicts
     lld
     mold
     cmake
@@ -253,7 +254,7 @@ in
     ffmpeg
     qemu
     pdfpc
-    cudaPackages.cudatoolkit
+    (lib.lowPrio cudaPackages.cudatoolkit) # bundles cuda-gdb data files that clash with gdb
 
     # Nix tooling
     devenv
