@@ -3,7 +3,7 @@
 #
 # After installing, compare with `nixos-generate-config --show-hardware-config`
 # and copy across anything missing here.
-{ inputs, lib, ... }:
+{ inputs, config, lib, ... }:
 {
   imports = [
     inputs.nixos-hardware.nixosModules.common-cpu-intel-cpu-only
@@ -12,7 +12,19 @@
   ];
 
   boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "ahci" "usbhid" "usb_storage" "sd_mod" ];
-  boot.kernelModules = [ "kvm-intel" ];
+  # nct6687: the MSI board's sensor chip (fans/temps in `sensors`); out-of-tree driver
+  boot.kernelModules = [ "kvm-intel" "nct6687" ];
+  boot.extraModulePackages = [ config.boot.kernelPackages.nct6687d ];
+
+  # WD SN770s drop off the bus when they enter deep power-saving states
+  # ("nvme nvme0: controller is down; will reset: CSTS=0xffffffff").
+  # Disable NVMe APST and PCIe ASPM so the drive never goes to sleep —
+  # negligible power cost on a desktop. The same two params must be typed
+  # at the installer's boot menu too (see README step 3).
+  boot.kernelParams = [
+    "nvme_core.default_ps_max_latency_us=0"
+    "pcie_aspm=off"
+  ];
 
   hardware.enableRedistributableFirmware = true;
   hardware.cpu.intel.updateMicrocode = true;

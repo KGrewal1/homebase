@@ -56,7 +56,33 @@ Download and write to it rather than the dying SSD.
 
 ## 1. Make the install USB
 
-No custom ISO is needed — the official one installs this flake directly.
+### Easiest: the offline installer (recommended)
+
+`.#neptune-installer` is a USB image with neptune's whole system already built
+inside it, the SN770 power fix baked into its boot entries, and an
+`install-neptune` command that does all of step 3 for you. Build it on any
+x86_64 Linux machine with Nix (no Nix? run it in Docker, below) — ~10 GB,
+needs a ≥ 16 GB stick:
+
+```bash
+nix build .#neptune-installer
+# without Nix installed:
+#   docker run --rm -v homebase-nix:/nix -v $PWD:/src -w /src nixos/nix sh -c \
+#     'git config --global --add safe.directory /src &&
+#      nix --extra-experimental-features "nix-command flakes" build .#neptune-installer &&
+#      cp result/iso/*.iso /src/'
+lsblk -d -o NAME,MODEL,SIZE,TRAN     # find the USB: TRAN=usb
+sudo dd if=$(echo result/iso/*.iso) of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Rebuild it whenever the config changes. Then on neptune: Secure Boot off,
+**F11** → the USB's UEFI entry → it logs you in → run `install-neptune`
+(type `wipe` to confirm, set kirpal's password, optionally restore Tailscale
+from Sirius) → reboot. Skip to [4. First boot](#4-first-boot).
+
+### Manual: the official ISO
+
+The official one installs this flake directly.
 
 ```bash
 cd ~/Documents/sirius/Kirpal_Share
@@ -91,7 +117,26 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
 
 ## 3. Install
 
-1. Boot the USB. If the screen is blank, pick the `nomodeset` boot entry.
+1. Boot the USB — **but first stop the SN770 falling asleep**. Its power
+   saving makes it vanish mid-install (`nvme nvme0: controller is down; will
+   reset`, then disko/nixos-install fail with I/O errors). At the boot menu,
+   highlight the entry (the `nomodeset` one if the screen is blank), press
+   **`e`**, add to the end of the line starting `linux`:
+
+   ```
+   nvme_core.default_ps_max_latency_us=0 pcie_aspm=off
+   ```
+
+   then **Ctrl-X** / **F10** to boot. (Using the legacy BIOS menu instead? Press
+   **Tab** to edit the line, then Enter.) Check it took effect — should print `0`:
+
+   ```bash
+   cat /sys/module/nvme_core/parameters/default_ps_max_latency_us
+   ```
+
+   The installed system sets these itself (`hardware.nix`), so this is only
+   needed on the USB.
+
    Connect to the network (ethernet just works; wifi on minimal: `sudo systemctl start wpa_supplicant`
    then `wpa_cli`, or use `nmtui` on the graphical ISO).
 
