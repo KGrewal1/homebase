@@ -91,7 +91,26 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
 
 ## 3. Install
 
-1. Boot the USB. If the screen is blank, pick the `nomodeset` boot entry.
+1. Boot the USB — **but first stop the SN770 falling asleep**. Its power
+   saving makes it vanish mid-install (`nvme nvme0: controller is down; will
+   reset`, then disko/nixos-install fail with I/O errors). At the boot menu,
+   highlight the entry (the `nomodeset` one if the screen is blank), press
+   **`e`**, add to the end of the line starting `linux`:
+
+   ```
+   nvme_core.default_ps_max_latency_us=0 pcie_aspm=off
+   ```
+
+   then **Ctrl-X** / **F10** to boot. (Using the legacy BIOS menu instead? Press
+   **Tab** to edit the line, then Enter.) Check it took effect — should print `0`:
+
+   ```bash
+   cat /sys/module/nvme_core/parameters/default_ps_max_latency_us
+   ```
+
+   The installed system sets these itself (`hardware.nix`), so this is only
+   needed on the USB.
+
    Connect to the network (ethernet just works; wifi on minimal: `sudo systemctl start wpa_supplicant`
    then `wpa_cli`, or use `nmtui` on the graphical ISO).
 
