@@ -15,6 +15,7 @@
   hardware.nvidia = {
     open = true; # open kernel module, recommended for Turing and newer
     modesetting.enable = true; # required for Wayland/COSMIC
+    powerManagement.enable = true; # save VRAM across suspend; else black/garbled screen on resume
     nvidiaSettings = true;
     package = config.boot.kernelPackages.nvidiaPackages.stable;
   };
