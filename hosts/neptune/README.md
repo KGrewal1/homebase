@@ -89,13 +89,17 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
    Connect to the network (ethernet just works; wifi on minimal: `sudo systemctl start wpa_supplicant`
    then `wpa_cli`, or use `nmtui` on the graphical ISO).
 
-2. Get the config:
+2. Get the config. The ISO has no git, so borrow it from nixpkgs for this
+   shell (it lives in RAM; nothing touches the disks):
 
    ```bash
-   nix-shell -p git
+   nix-shell -p git        # drops you into a shell with git; stay in it
+   cd ~                    # /home/nixos on the live USB
    git clone -b neptune https://github.com/KGrewal1/homebase
    cd homebase
    ```
+
+   The repo is public, so no GitHub login is needed to clone.
 
 3. Check the target drive is the healthy one:
 
@@ -118,14 +122,21 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
    sudo nixos-enter --root /mnt -c 'passwd kirpal'
    ```
 
-6. Copy the repo onto the new system so it's there after reboot, then reboot:
+6. Copy the repo onto the new system so it's there after reboot, then reboot.
+   The live USB's files vanish on reboot; `/mnt` is the new drive. This is a
+   plain copy (no git needed) and keeps the `.git` folder, so it's still a
+   normal checkout on the new system:
 
    ```bash
    sudo mkdir -p /mnt/home/kirpal/Documents
-   sudo cp -r ~/homebase /mnt/home/kirpal/Documents/
-   sudo nixos-enter --root /mnt -c 'chown -R kirpal:users /home/kirpal/Documents'
+   sudo cp -a /home/nixos/homebase /mnt/home/kirpal/Documents/
+   sudo nixos-enter --root /mnt -c 'chown -R kirpal:users /home/kirpal'
    reboot
    ```
+
+   (Skipped this? No problem: the new system has git installed, so after
+   first boot just run
+   `git clone -b neptune https://github.com/KGrewal1/homebase ~/Documents/homebase`.)
 
 ## 4. First boot
 
