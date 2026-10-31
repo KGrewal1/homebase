@@ -50,13 +50,20 @@
         };
     in
     {
-      packages.${system} = import ./docker { inherit pkgs lib base pkgsUnfree; };
+      packages.${system} = import ./docker { inherit pkgs lib base pkgsUnfree; } // {
+        # Offline installer USB for neptune — see hosts/neptune/README.md
+        neptune-installer = self.nixosConfigurations.neptune-installer.config.system.build.isoImage;
+      };
 
       nixosConfigurations = {
         # Main desktop (MSI MS-7D25, i7-12700K, RTX 3070 Ti)
         neptune = mkNixosSystem {
           system = "x86_64-linux";
           modules = [ ./hosts/neptune ];
+        };
+        neptune-installer = mkNixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./hosts/neptune/installer.nix ];
         };
 
         dev = mkNixosSystem {

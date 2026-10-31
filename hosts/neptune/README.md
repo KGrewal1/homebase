@@ -56,7 +56,33 @@ Download and write to it rather than the dying SSD.
 
 ## 1. Make the install USB
 
-No custom ISO is needed — the official one installs this flake directly.
+### Easiest: the offline installer (recommended)
+
+`.#neptune-installer` is a USB image with neptune's whole system already built
+inside it, the SN770 power fix baked into its boot entries, and an
+`install-neptune` command that does all of step 3 for you. Build it on any
+x86_64 Linux machine with Nix (no Nix? run it in Docker, below) — ~10 GB,
+needs a ≥ 16 GB stick:
+
+```bash
+nix build .#neptune-installer
+# without Nix installed:
+#   docker run --rm -v homebase-nix:/nix -v $PWD:/src -w /src nixos/nix sh -c \
+#     'git config --global --add safe.directory /src &&
+#      nix --extra-experimental-features "nix-command flakes" build .#neptune-installer &&
+#      cp result/iso/*.iso /src/'
+lsblk -d -o NAME,MODEL,SIZE,TRAN     # find the USB: TRAN=usb
+sudo dd if=$(echo result/iso/*.iso) of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Rebuild it whenever the config changes. Then on neptune: Secure Boot off,
+**F11** → the USB's UEFI entry → it logs you in → run `install-neptune`
+(type `wipe` to confirm, set kirpal's password, optionally restore Tailscale
+from Sirius) → reboot. Skip to [4. First boot](#4-first-boot).
+
+### Manual: the official ISO
+
+The official one installs this flake directly.
 
 ```bash
 cd ~/Documents/sirius/Kirpal_Share
