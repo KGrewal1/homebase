@@ -1,10 +1,12 @@
-# Tailscale. After the first boot run once:  sudo tailscale up --ssh
-# (Login state persists in /var/lib/tailscale, so no auth key is needed.)
+# Tailscale. Identity lives in /var/lib/tailscale/tailscaled.state.
+# Either restore that file from the old install (keeps name + 100.113.28.32),
+# or log in fresh once with `sudo tailscale up`. See hosts/neptune/README.md.
 { config, ... }:
 {
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "client"; # use exit nodes / subnet routes
+    extraSetFlags = [ "--ssh" ]; # Tailscale SSH, applied on every start
   };
 
   # MagicDNS works best with systemd-resolved

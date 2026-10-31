@@ -41,14 +41,18 @@ Download and write to it rather than the dying SSD.
    ls $S/neptune_home/.ssh $S/neptune_home/.gnupg
    ```
 
-3. **Push this branch** so the installer can clone it (commits are GPG-signed):
+3. **Make sure homebase is pushed to `master`** — the installer clones it from GitHub.
+
+4. **Save Tailscale's identity** so the new install comes back as the same
+   machine (`neptune`, `100.113.28.32`, same ACLs) without logging in again.
+   This file is a credential: it's deleted from Sirius again after first boot.
 
    ```bash
-   cd ~/Documents/homebase
-   git add -A
-   git commit -m "neptune: NixOS desktop config"
-   git push -u origin neptune
+   sudo cp /var/lib/tailscale/tailscaled.state ~/Documents/sirius/Kirpal_Share/tailscaled.state
    ```
+
+   Do this last, right before shutting down for the install, and don't boot the
+   old Ubuntu drive again afterwards — two machines with one identity fight.
 
 ## 1. Make the install USB
 
@@ -58,7 +62,9 @@ No custom ISO is needed — the official one installs this flake directly.
 cd ~/Documents/sirius/Kirpal_Share
 ISO=latest-nixos-minimal-x86_64-linux.iso
 curl -LO https://channels.nixos.org/nixos-unstable/$ISO
-curl -L https://channels.nixos.org/nixos-unstable/$ISO.sha256 | sha256sum -c
+# the .sha256 names the versioned file, so compare hashes directly
+[ "$(curl -sL https://channels.nixos.org/nixos-unstable/$ISO.sha256 | cut -d' ' -f1)" = \
+  "$(sha256sum $ISO | cut -d' ' -f1)" ] && echo OK || echo MISMATCH
 ```
 
 (Prefer a desktop installer? Grab the unstable *graphical* ISO from
@@ -93,9 +99,9 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
    shell (it lives in RAM; nothing touches the disks):
 
    ```bash
-   nix-shell -p git        # drops you into a shell with git; stay in it
-   cd ~                    # /home/nixos on the live USB
-   git clone -b neptune https://github.com/KGrewal1/homebase
+   nix-shell -p git cifs-utils   # a shell with git + SMB mounting; stay in it
+   cd ~                          # /home/nixos on the live USB
+   git clone https://github.com/KGrewal1/homebase
    cd homebase
    ```
 
@@ -122,7 +128,7 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
    sudo nixos-enter --root /mnt -c 'passwd kirpal'
    ```
 
-6. Copy the repo onto the new system so it's there after reboot, then reboot.
+6. Copy the repo onto the new system so it's there after reboot.
    The live USB's files vanish on reboot; `/mnt` is the new drive. This is a
    plain copy (no git needed) and keeps the `.git` folder, so it's still a
    normal checkout on the new system:
@@ -131,17 +137,37 @@ sudo dd if=$ISO of=/dev/sdX bs=4M status=progress oflag=sync
    sudo mkdir -p /mnt/home/kirpal/Documents
    sudo cp -a /home/nixos/homebase /mnt/home/kirpal/Documents/
    sudo nixos-enter --root /mnt -c 'chown -R kirpal:users /home/kirpal'
+   ```
+
+7. Restore Tailscale's identity (saved in step 0.4), then reboot:
+
+   ```bash
+   sudo mkdir -p /tmp/sirius /mnt/var/lib/tailscale
+   sudo $(which mount.cifs) //192.168.1.134/Kirpal_Share /tmp/sirius -o username=kirpal,vers=3.0
+   sudo install -m 600 /tmp/sirius/tailscaled.state /mnt/var/lib/tailscale/tailscaled.state
+   sudo umount /tmp/sirius
    reboot
    ```
 
    (Skipped this? No problem: the new system has git installed, so after
    first boot just run
-   `git clone -b neptune https://github.com/KGrewal1/homebase ~/Documents/homebase`.)
+   `git clone https://github.com/KGrewal1/homebase ~/Documents/homebase`.)
 
 ## 4. First boot
 
+Tailscale should already be connected as `neptune` (Tailscale SSH is set in the
+config). Check, then delete the saved credential from Sirius:
+
 ```bash
-sudo tailscale up --ssh
+tailscale status --self        # expect: 100.113.28.32  neptune
+rm /mnt/sirius/Kirpal_Share/tailscaled.state   # after mounting Sirius below
+```
+
+Didn't restore it? Remove the old `neptune` in the Tailscale admin console
+(so the name is free), then run `sudo tailscale up` and open the login link.
+You'll get a new 100.x IP.
+
+```bash
 nixos-generate-config --show-hardware-config --no-filesystems   # compare with hardware.nix
 ```
 
