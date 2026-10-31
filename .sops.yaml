@@ -1,10 +1,10 @@
 # sops-nix recipients. Secrets are encrypted to:
 #   - kirpal: your personal age key (~/.config/sops/age/keys.txt) — lets you edit
 #   - neptune: the machine's SSH host key converted to age — lets it decrypt at boot
-# Replace the placeholders; see hosts/neptune/README.md.
+# See hosts/neptune/README.md.
 keys:
-  - &kirpal age1REPLACE_WITH_YOUR_PERSONAL_AGE_PUBLIC_KEY
-  - &neptune age1REPLACE_WITH_NEPTUNE_HOST_AGE_PUBLIC_KEY
+  - &kirpal age13vppfkpvnssvvzqthzu4v807ea09usqa9ggyec4mt9rvmv56harq36j98f
+  - &neptune age1ddnvl9fcylqekhcetyfl8hrv4twpz3j5fg0pxhs6yp5t94qyv5fqdyr860
 creation_rules:
   - path_regex: hosts/neptune/secrets\.yaml$
     key_groups:
